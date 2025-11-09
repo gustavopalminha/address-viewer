@@ -1,0 +1,42 @@
+name: 🧪 E2E Production Build Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  e2e_production_test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: ⬇️ Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.11.0
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🎭 Install Playwright Browsers
+        run: npx playwright install --with-deps
+
+      - name: 🧪 Run Production E2E Tests
+        # 💡 This step executes the script: 
+        # "E2E_TARGET=e2e-prod npm run build && playwright test"
+        # The script handles setting the environment variable, building the app, 
+        # launching the 'vite preview' server (port 4173), and running the tests.
+        run: npm run test:e2e:prod
+
+      - name: 📝 Upload Artifacts (on failure)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-prod
+          path: playwright-report/
+          retention-days: 2

@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json", // Inherit all your base settings
+  "compilerOptions": {
+    // Override or add settings specific to Playwright/E2E files
+    "types": [
+      "node",        // 💡 Ensure Node types for 'process' are included
+      "playwright/test" // Ensure Playwright types are included
+    ]
+  },
+  "include": [
+    "playwright.config.ts", // 💡 Explicitly include the config file
+    "e2e/**/*.ts"           // Include all your test files
+  ]
+}
