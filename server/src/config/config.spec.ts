@@ -17,7 +17,7 @@ describe('Application Configuration', () => {
     delete process.env.PORT;
     // We must 'require' inside the test to load the new env
     const config = (await import('./index')).default;
-    expect(config.PORT).toBe(81);
+    expect(config.PORT).toBe(8080);
   });
 
   it('should return correct port from process.env.PORT', async () => {

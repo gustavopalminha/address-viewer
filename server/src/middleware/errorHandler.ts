@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 
 // Extend the standard Error type to include an optional status code
-interface AppError extends Error {
+export interface AppError extends Error {
   status?: number;
 }
 

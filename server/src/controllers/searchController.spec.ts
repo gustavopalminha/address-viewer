@@ -1,126 +1,152 @@
 import { Request, Response, NextFunction } from 'express';
 import { searchAddresses } from './searchController';
-import { searchService } from '../services/searchService';
-import { Address } from '../types/address'; // Import your type
+import { SearchService } from '../services/searchService';
+import { Address } from '../types/address';
+// Removed: import { BadRequestError } from '../utils/ApiError'; 
 
-// 1. Mock the searchService
-// We tell Jest to replace the searchService with a mock object
-jest.mock('../services/searchService', () => ({
-  searchService: {
-    search: jest.fn(),
-  },
+// --- MOCK SETUP ---
+
+// Mock data
+const mockResults = [
+    { 
+      street: 'Mock Street', 
+      city: 'Mock City', 
+      postNumber: '12345',
+      county: 'Mock County',
+      district: 'Mock District',
+      municipality: 'Mock Municipality',
+      municipalityNumber: 'Mock MunicipalityNumber',
+      type: 'Mock Type',
+      typeCode: 'Mock TypeCode',
+    },
+] as Address[];
+
+// Mock the SearchService methods used by the controller
+const mockSearchService = {
+    search: jest.fn((_query: string) => mockResults),
+} as unknown as SearchService; // Type assertion since we are only mocking the 'search' method
+
+// Mock the dependency injection hook (getSearchService from server.ts)
+// We use jest.mock() to intercept the import of the server file.
+jest.mock('../server', () => ({
+    getSearchService: () => mockSearchService,
 }));
 
-// --- Test Suite ---
-describe('Search Controller (searchController.ts)', () => {
-  let mockRequest: Partial<Request>;
-  let mockResponse: Partial<Response>;
-  let mockNext: NextFunction;
 
-  // Before each test, reset the mock objects
-  beforeEach(() => {
-    jest.clearAllMocks(); // Clears call history for all mocks
+// Mock Express utility functions
+const mockReq = (params: any = {}): Partial<Request> => ({
+    params: params,
+});
 
-    // Create a mock request object
-    mockRequest = {
-      params: {},
-    };
+const mockRes = (): Partial<Response> => ({
+    json: jest.fn().mockReturnThis(),
+    status: jest.fn().mockReturnThis(),
+});
 
-    // Create a mock response object
-    // We mock .status() to return 'this' (the mockResponse)
-    // so that we can chain .json() just like in Express.
-    mockResponse = {
-      status: jest.fn(() => mockResponse as Response),
-      json: jest.fn(),
-    };
+const mockNext: NextFunction = jest.fn();
 
-    // Create a mock next function
-    mockNext = jest.fn();
-  });
 
-  // --- Test 1: Successful Search ---
-  it('should return search results for a valid query', () => {
-    // Arrange
-    const query = 'Oslo';
-    const searchResults: Address[] = [
-      { street: 'Oslo Street 1', city: 'OSLO' } as Address,
-    ];
+// --- TEST SUITE ---
+
+describe('SearchController', () => {
+    let req: Partial<Request>;
+    let res: Partial<Response>;
+
+    beforeEach(() => {
+        // Reset mocks before each test
+        req = mockReq();
+        res = mockRes();
+        (mockNext as jest.Mock).mockClear();
+        mockSearchService.search = jest.fn((_query: string) => mockResults);
+    });
+
+    it('should successfully return search results for a valid query', () => {
+        const validQuery = 'LongEnoughQuery';
+        req.params = { query: validQuery };
+
+        searchAddresses(req as Request, res as Response, mockNext);
+
+        // 1. Service should be called with the query parameter
+        expect(mockSearchService.search).toHaveBeenCalledWith(validQuery);
+
+        // 2. Response should return the results with status 200 (default)
+        expect(res.json).toHaveBeenCalledWith(mockResults);
+
+        // 3. next() should NOT be called
+        expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it('should call next() with an error object containing 400 status if query is too short (< 3 chars)', () => {
+        // Test case: Query is "ab"
+        req.params = { query: 'ab' };
+
+        searchAddresses(req as Request, res as Response, mockNext);
+
+        // 1. Service should NOT be called
+        expect(mockSearchService.search).not.toHaveBeenCalled();
+
+        // 2. next() should be called with an error object
+        expect(mockNext).toHaveBeenCalledWith(
+            expect.objectContaining({
+                message: 'Query must be at least 3 characters long',
+                status: 400, // Check for the statusCode property instead of the class type
+            })
+        );
+        // We can still check that it's an instance of Error, which should be true for ApiError subclasses
+        expect((mockNext as jest.Mock).mock.calls[0][0]).toBeInstanceOf(Error);
+        
+        // 3. Response functions should NOT be called manually
+        expect(res.json).not.toHaveBeenCalled();
+        expect(res.status).not.toHaveBeenCalled();
+    });
+
+    it('should call next() with an error object containing 400 status if query is missing (empty string)', () => {
+        // Test case: Query is ""
+        req.params = { query: '' };
+
+        searchAddresses(req as Request, res as Response, mockNext);
+
+        expect(mockSearchService.search).not.toHaveBeenCalled();
+        // Check for the expected object shape, focusing on properties (message, statusCode)
+        expect(mockNext).toHaveBeenCalledWith(
+             expect.objectContaining({
+                message: 'Query must be at least 3 characters long',
+                status: 400,
+            })
+        );
+    });
     
-    // Set up the request parameters
-    mockRequest.params = { query };
+    // NEW TEST CASE: Explicitly test when the parameter is not present in req.params
+    it('should call next() with an error object containing 400 status if query parameter is not set at all', () => {
+        // Test case: req.params = {} (no 'query' key) or query is undefined
+        req.params = {};
 
-    // Tell our mock service what to return
-    (searchService.search as jest.Mock).mockReturnValue(searchResults);
+        searchAddresses(req as Request, res as Response, mockNext);
 
-    // Act
-    searchAddresses(
-      mockRequest as Request,
-      mockResponse as Response,
-      mockNext,
-    );
-
-    // Assert
-    // Was the service called with the correct query?
-    expect(searchService.search).toHaveBeenCalledWith(query);
-    // Did we send the results as JSON?
-    expect(mockResponse.json).toHaveBeenCalledWith(searchResults);
-    // Was status() NOT called? (implying 200 OK)
-    expect(mockResponse.status).not.toHaveBeenCalled();
-    // Was the error handler NOT called?
-    expect(mockNext).not.toHaveBeenCalled();
-  });
-
-  // --- Test 2: Query Too Short ---
-  it('should return a 400 error if the query is less than 3 characters', () => {
-    // Arrange
-    const query = 'Os';
-    mockRequest.params = { query };
-
-    // Act
-    searchAddresses(
-      mockRequest as Request,
-      mockResponse as Response,
-      mockNext,
-    );
-
-    // Assert
-    // Was the service NOT called?
-    expect(searchService.search).not.toHaveBeenCalled();
-    // Was the status set to 400?
-    expect(mockResponse.status).toHaveBeenCalledWith(400);
-    // Was the error message sent as JSON?
-    expect(mockResponse.json).toHaveBeenCalledWith({
-      error: 'Query must be at least 3 characters long',
-    });
-    // Was the error handler NOT called?
-    expect(mockNext).not.toHaveBeenCalled();
-  });
-
-  // --- Test 3: Service Throws an Error ---
-  it('should call the error handler (next) if the service fails', () => {
-    // Arrange
-    const query = 'ValidQuery';
-    const serviceError = new Error('Database connection failed');
-    mockRequest.params = { query };
-
-    // Tell our mock service to throw an error
-    (searchService.search as jest.Mock).mockImplementation(() => {
-      throw serviceError;
+        expect(mockSearchService.search).not.toHaveBeenCalled();
+        expect(mockNext).toHaveBeenCalledWith(
+             expect.objectContaining({
+                message: 'Query must be at least 3 characters long',
+                status: 400,
+            })
+        );
     });
 
-    // Act
-    searchAddresses(
-      mockRequest as Request,
-      mockResponse as Response,
-      mockNext,
-    );
+    it('should call next() for any unexpected error during search execution', () => {
+        // Simulate a runtime error inside the service layer
+        const unexpectedError = new Error('Database connection failed');
+        mockSearchService.search = jest.fn(() => {
+            throw unexpectedError;
+        });
 
-    // Assert
-    // Was the service still called?
-    expect(searchService.search).toHaveBeenCalledWith(query);
-    // Was a JSON response NOT sent?
-    expect(mockResponse.json).not.toHaveBeenCalled();
-    // Was the error handler (next) called with the correct error?
-    expect(mockNext).toHaveBeenCalledWith(serviceError);
-  });
+        req.params = { query: 'ValidQuery' };
+
+        searchAddresses(req as Request, res as Response, mockNext);
+
+        // 1. next() should be called with the unexpected error
+        expect(mockNext).toHaveBeenCalledWith(unexpectedError);
+        
+        // 2. Response functions should NOT be called manually
+        expect(res.json).not.toHaveBeenCalled();
+    });
 });

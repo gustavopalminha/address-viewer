@@ -3,7 +3,7 @@ import { searchAddresses } from '../controllers/searchController';
 
 const router = Router();
 
-// Define GET route as requested [cite: 12]
+// Define GET route as requested
 router.get('/search/:query', searchAddresses);
 
 export default router;

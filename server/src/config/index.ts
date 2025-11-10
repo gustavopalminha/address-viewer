@@ -1,11 +1,6 @@
 /**
  * Centralized application configuration.
  *
- * Reads values from process.env, validates them, and exports
- * a type-safe, immutable configuration object.
- *
- * This file should be the single source of truth for all
- * configuration variables.
  */
 
 // Function to validate and parse the PORT
@@ -18,7 +13,7 @@ const getPort = (): number => {
     }
   }
   // Default to 8080 if not specified or invalid
-  return 81;
+  return 8080;
 };
 
 // Function to validate the NODE_ENV

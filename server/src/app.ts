@@ -13,23 +13,22 @@ import { apiLimiter } from './middleware/apiRateLimiter';
  * @returns The Express application.
  */
 const createApp = (): Express => {
+  
   const app = express();
 
-  // Production Requirement: Security middleware
+  // Security middleware
   app.use(helmet(helmetParameters));
   app.use(helmet.xFrameOptions({ action: 'deny' }));
 
   // --- CONDITIONAL RATE LIMITER ---
   // Only apply the rate limiter when in 'production'
-  // NOTE: This check runs every time createApp() is called,
-  // which is necessary for testing different environments. [cite: 56]
   if (config.NODE_ENV === 'production') {
     app.use(apiLimiter);
   }
 
   app.use(cors());
 
-  // Production Requirement: Logging [cite: 60]
+  // Production Requirement: Logging
   app.use(morgan(config.NODE_ENV === 'development' ? 'dev' : 'short'));
 
   // Setup JSON

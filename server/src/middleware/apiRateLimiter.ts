@@ -10,10 +10,6 @@ const apiLimiter = rateLimit({
   store: apiLimiterStore, // <-- Pass the store here
   windowMs: 1 * 60 * 1000,
   max: 25,
-  // --- THIS IS THE FIX ---
-  // By sending an object, 'express-rate-limit' will set
-  // the Content-Type to 'application/json'.
-  // 'supertest' will then parse it into 'res.body'.
   message: {
     message: 'Too many requests from this IP, please try again after a minute.',
   },

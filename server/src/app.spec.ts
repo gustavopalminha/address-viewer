@@ -135,7 +135,7 @@ describe('App Middleware', () => {
       expect(blockedRes.status).toBe(429); // 429 Too Many Requests
       expect(blockedRes.body.message).toContain('Too many requests');
 
-      // --- Fast-forward time by 1 minute ---
+      // --- Fast-forward time by 2 minutes ---
       jest.advanceTimersByTime(60 * 2000);
       
       // --- Make a 27th request (should be allowed again) ---

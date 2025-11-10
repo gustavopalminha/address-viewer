@@ -1,141 +1,103 @@
-import { Address } from '../types/address';
-// DO NOT import 'fs', 'path', 'TrieSearch' here. They are mocked inside the tests.
+import TrieSearch from 'trie-search';
+import { SearchService } from './searchService';
+import { AddressRepository } from '../repository/AddressRepository';
+import { Address } from '../types/address'; // Assuming this type exists
 
-// --- Mock Data ---
+// --- 1. MOCK DATA SETUP ---
+
+// Mock data set for testing
 const mockAddresses: Address[] = [
   { street: 'Test Street 1', city: 'OSLO', postNumber: '1' } as Address,
   { street: 'Test Avenue 2', city: 'BERGEN', postNumber: '2' } as Address,
   { street: 'Test Avenue 3', city: 'OZINK', postNumber: '3' } as Address,
+  { street: 'Test Avenue 4', city: 'OSLET', postNumber: '4' } as Address,
 ];
-const mockJsonString = JSON.stringify(mockAddresses);
-const mockDataPath = 'mock/path/to/data/adresses.json';
 
-// --- Mock Implementations ---
-// We define these in the outer scope so we can clear them
-const mockAddAll = jest.fn();
-const mockGet = jest.fn();
+// Create a helper function to populate a TrieSearch instance with mock data
+const createMockTrie = (): TrieSearch<Address> => {
+  const trie = new TrieSearch<Address>(['street', 'city', 'postNumber'], {
+    min: 3,
+    ignoreCase: true,
+  });
+  trie.addAll(mockAddresses);
+  return trie;
+};
 
-// --- Mocks ---
-// We mock fs and path so Jest knows about them.
-// We'll configure them *inside* the tests.
-jest.mock('fs');
-jest.mock('path');
+// --- 2. MOCK THE DEPENDENCY (AddressRepository) ---
 
-// --- Spy on process.exit and console ---
-const mockProcessExit = jest
-  .spyOn(process, 'exit')
-  .mockImplementation(() => undefined as never);
-const mockConsoleError = jest
-  .spyOn(console, 'error')
-  .mockImplementation(() => {});
-const mockConsoleWarn = jest
-  .spyOn(console, 'warn')
-  .mockImplementation(() => {});
+// This creates a mock class that pretends to be the AddressRepository.
+// Crucially, it returns the mock, pre-loaded Trie, avoiding any file I/O.
+const mockRepository: AddressRepository = {
+  loadData: jest.fn(async () => {}), // Not used by the Service, but required by the interface
+  getTrie: jest.fn(createMockTrie),
+} as unknown as AddressRepository; // Use type assertion to satisfy TypeScript
 
-// --- The Test Suite ---
+// --- 3. TEST SUITE ---
+
 describe('SearchService', () => {
-  // --- Block 1: Success Tests ---
-  describe('on successful data load', () => {
-    let searchService: any;
-    let fsMock: { readFileSync: jest.Mock };
-    let pathMock: { join: jest.Mock };
+  let searchService: SearchService;
 
-    beforeAll(async () => {
-      jest.clearAllMocks();
-      jest.resetModules(); // Resets all modules
-
-      // We must re-mock TrieSearch *after* resetting modules.
-      // We use jest.doMock() because it is not hoisted.
-      jest.doMock('trie-search', () => ({
-        __esModule: true, // Signal it's an ES Module
-        default: jest.fn().mockImplementation(() => { // Mock the default export
-          // This is the mock constructor
-          return {
-            // This is the mock instance
-            addAll: mockAddAll,
-            get: mockGet,
-          };
-        }),
-      }));
-
-      // Get fresh mock for fs
-      fsMock = require('fs') as { readFileSync: jest.Mock };
-      fsMock.readFileSync.mockReturnValue(mockJsonString);
-
-      // Get fresh mock for path
-      pathMock = require('path') as { join: jest.Mock };
-      pathMock.join.mockReturnValue(mockDataPath);
-
-      // Set up the trie.get return value
-      mockGet.mockReturnValue(mockAddresses);
-
-      // NOW we import the service.
-      searchService = (await import('./searchService')).searchService;
-    });
-
-    it('should return search results directly from the trie', () => {
-      // Act
-      const results = searchService.search('Test');
-      // Assert
-      expect(mockGet).toHaveBeenCalledWith('Test');
-      expect(results).toEqual(mockAddresses);
-    });
-
-    it('should limit search results to 20', () => {
-      // Arrange
-      const longList = new Array(25)
-        .fill(0)
-        .map((_, i) => ({ street: `Street ${i}` } as Address));
-      mockGet.mockReturnValue(longList);
-
-      // Act
-      const results = searchService.search('Street');
-      // Assert
-      expect(mockGet).toHaveBeenCalledWith('Street');
-      expect(results.length).toBe(20);
-      expect(results[19].street).toBe('Street 19');
-    });
+  // Before each test, instantiate the SearchService with the mock repository
+  beforeAll(() => {
+    // Dependency Injection in action: We inject the mock, not the real implementation
+    searchService = new SearchService(mockRepository);
   });
 
-  // --- Block 2: Failure Test ---
-  describe('on data loading failure', () => {
-    it('should handle data loading failure', async () => {
-      // Arrange
-      jest.clearAllMocks();
-      jest.resetModules();
+  it('should be instantiated correctly by receiving the mock repository', () => {
+    expect(searchService).toBeInstanceOf(SearchService);
+    expect(mockRepository.getTrie).toHaveBeenCalled();
+  });
 
-      const loadError = new Error('File not found');
+  it('should find addresses matching a full street name query (case insensitive)', () => {
+    const results = searchService.search('test street 1');
+    expect(results).toHaveLength(1);
+    expect(results[0].street).toBe('Test Street 1');
+  });
 
-      // We still need to mock path so it doesn't fail
-      const pathMock = require('path') as { join: jest.Mock };
-      pathMock.join.mockReturnValue(mockDataPath);
+  it('should find multiple addresses matching a partial query (street)', () => {
+    const results = searchService.search('test avenue');
+    expect(results).toHaveLength(3);
+    expect(results.some(r => r.street === 'Test Avenue 2')).toBe(true);
+  });
+  
+  it('should find multiple addresses matching a partial query (city)', () => {
+    const results = searchService.search('osl');
+    expect(results).toHaveLength(2);
+    expect(results.some(r => r.city === 'OSLO')).toBe(true);
+  });
 
-      // Import the fresh mock *after* reset
-      const fsMock = require('fs') as { readFileSync: jest.Mock };
-      // Set up the *failing* file read
-      fsMock.readFileSync.mockImplementation(() => {
-        throw loadError;
-      });
-      
-      // We don't need to mock TrieSearch, as the constructor
-      // will fail in loadData() before it's called.
+  it('should return an empty array for a non-matching query', () => {
+    const results = searchService.search('NonExistentAddress');
+    expect(results).toHaveLength(0);
+  });
 
-      // Act: Import the service. The constructor will fail.
-      const failedService = (await import('./searchService')).searchService;
+  it('should enforce the maximum limit of 20 results', () => {
+    // To test this accurately, we need a trie with more than 20 results.
+    // For simplicity, we mock a trie that returns a huge array and check the slice logic.
+    const largeMockTrie: TrieSearch<Address> = {
+        get: jest.fn(() => Array(50).fill({ street: 'A', city: 'B', postNumber: 'C'})),
+    } as unknown as TrieSearch<Address>;
+    
+    // Create a new SearchService instance with a temporary mock repository
+    const mockRepoForLimitTest: AddressRepository = {
+        loadData: jest.fn(async () => {}),
+        getTrie: jest.fn(() => largeMockTrie),
+    } as unknown as AddressRepository;
 
-      // Assert (Loading)
-      expect(mockConsoleError).toHaveBeenCalledWith(
-        'Failed to load address dataset:',
-        loadError,
-      );
-      expect(mockProcessExit).toHaveBeenCalledWith(1);
-
-      // Assert (Searching)
-      const results = failedService.search('test');
-      expect(results).toEqual([]);
-      expect(mockConsoleWarn).toHaveBeenCalledWith(
-        'Search service queried before data was loaded.',
-      );
-    });
+    const limitService = new SearchService(mockRepoForLimitTest);
+    
+    const results = limitService.search('A'); // Query returns 50 results
+    expect(results).toHaveLength(20); // But the service must cap it at 20
+    expect(largeMockTrie.get).toHaveBeenCalledWith('A');
+  });
+  
+  it('should handle queries shorter than the minimum (3 chars) as per TrieSearch config', () => {
+    // The trie is configured with { min: 3 }. Queries like 'S' should return nothing.
+    const results = searchService.search('S');
+    expect(results).toHaveLength(0);
+    
+    // Query 'Osl' should work
+    const results2 = searchService.search('Osl');
+    expect(results2.length).toBeGreaterThan(0);
   });
 });
