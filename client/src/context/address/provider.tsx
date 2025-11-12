@@ -11,10 +11,15 @@ export function AddressContextProvider({ children }: { children: ReactNode }) {
   const [addresses, setAddresses] = useState<AddressItem[]>([]);
   const [isPending, startTransition] = useTransition();
 
+  //CR: included error handling logic here
   const fetchAddress = (input: string) => {
     startTransition(async () => {
-      const result = await getAddress<AddressItem[]>(input);
-      setAddresses(result);
+      try {
+        const result = await getAddress<AddressItem[]>(input);
+        setAddresses(result);    
+      } catch (error) {
+        console.error('Failed to fetch address:', error);
+      }
     });
   };
 

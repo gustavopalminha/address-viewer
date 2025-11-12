@@ -8,7 +8,9 @@ export const searchAddresses = (req: Request, res: Response, next: NextFunction)
     const query = req.params.query;
 
     // Enforce standard: API should require at least 3 chars
+    //CR: could add here zod for validating
     if (!query || query.length < 3) {
+       //CR: could type this object whitout using new Error(...) as AppError but using ts Type 
        const validationError = new Error('Query must be at least 3 characters long') as AppError;
        validationError.status = 400;
        return next(validationError);

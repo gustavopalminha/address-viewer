@@ -45,7 +45,8 @@ export const AddressList = () => {
       <>
         <ul className="w-full max-w-md border rounded-md divide-y mt-5" data-testid="address-list">
           {addresses.map((address, i) => (
-            <li key={i} className="p-3 text-sm">
+            {/*CR: Changed the key for better rendering handling */}
+            <li key={`${address.street}-${address.postNumber}-${i}`} className="p-3 text-sm">
               <Card>
                 <CardHeader>
                   <CardTitle>{address.street}</CardTitle>

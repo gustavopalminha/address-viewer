@@ -29,7 +29,6 @@ export async function startServer() {
     });
   } catch (error) {
     console.error('Failed to start server due to initialization error:', error);
-    // Note: The repository loadData() method itself already calls process.exit(1) on failure,
     process.exit(1); 
   }
 }

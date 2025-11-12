@@ -26,6 +26,7 @@ const createApp = (): Express => {
     app.use(apiLimiter);
   }
 
+  //CR: CROS enabled but not configured.
   app.use(cors());
 
   // Production Requirement: Logging
